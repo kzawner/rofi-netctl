@@ -7,17 +7,24 @@
 
 dev=wlp3s0
 
-profiles=$(find /etc/netctl -maxdepth 1 -type f -printf "%f\n")
+profiles=$(find /etc/netctl -maxdepth 1 -type f -printf "%f\n" | cut -d '-' -f "2-")
 
 if [[ "$1" == "-a" ]]; then
-  active_ap=$(sudo iw dev $dev scan | grep SSID: | gawk '{print $2}' \
-        | xargs -l1 printf "%q|" | sed 's/|$//')
+  # Get list of active AP, print SSID and signal strength.
+  active_ap=$(sudo iw dev $dev scan \
+    | grep -e 'SSID' -e 'signal' \
+    | xargs -L 2 \
+    | gawk '{printf("%-30s %s\n\r", $5, $2, $3)}')
 
-  profiles=$(echo "$profiles" | grep -E $active_ap)
+  # Make a regex from profile names, escape it from shell symbols with
+  # "printf %q".
+  profiles_grep=$(echo $profiles | xargs -l1 printf "%q|" | sed 's/|$//')
+  profiles=$(echo "$active_ap" | grep -iE "$profiles_grep")
 fi
 
-choice=`echo "$profiles" | rofi -font 'Misc Tamsyn,14' -i -dmenu -p 'network profile'`;
+choice=`echo "$profiles" \
+  | rofi -font 'Misc Tamsyn,14' -i -dmenu -p 'network profile'`;
 
 if [ -n "$choice" ]; then
-    sudo netctl switch-to $choice;
+    sudo netctl switch-to $dev-$(echo "$choice" | gawk '{print $1}');
 fi
